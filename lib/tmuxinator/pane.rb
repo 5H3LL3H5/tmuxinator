@@ -1,12 +1,15 @@
+# frozen_string_literal: true
+
 module Tmuxinator
   class Pane
-    attr_reader :commands, :project, :index, :tab
+    attr_reader :commands, :project, :index, :tab, :title
 
-    def initialize(index, project, tab, *commands)
+    def initialize(index, project, tab, *commands, title: nil)
       @commands = commands
       @index = index
       @project = project
       @tab = tab
+      @title = title.to_s.shellescape unless title.nil?
     end
 
     def tmux_window_and_pane_target
@@ -26,6 +29,12 @@ module Tmuxinator
         _send_target(command.shellescape)
       else
         ""
+      end
+    end
+
+    def tmux_set_title
+      unless title.nil?
+        _set_title(title)
       end
     end
 
@@ -54,12 +63,17 @@ module Tmuxinator
 
     private
 
-    def _send_target(e)
-      _send_keys(tmux_window_and_pane_target, e)
+    def _send_target(keys)
+      _send_keys(tmux_window_and_pane_target, keys)
     end
 
-    def _send_keys(t, e)
-      "#{project.tmux} send-keys -t #{t} #{e} C-m"
+    def _send_keys(target, keys)
+      "#{project.tmux} send-keys -t #{target} #{keys} C-m"
+    end
+
+    def _set_title(title)
+      target = tmux_window_and_pane_target
+      "#{project.tmux} select-pane -t #{target} -T #{title}"
     end
   end
 end

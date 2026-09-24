@@ -1,10 +1,15 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 describe Tmuxinator::Window do
   let(:project) { double }
   let(:panes) { ["vim", nil, "top"] }
+  let(:focused_pane) { nil }
   let(:window_name) { "editor" }
   let(:synchronize) { false }
+  let(:root) {}
+  let(:root?) { root }
   let(:yaml) do
     {
       window_name => {
@@ -14,27 +19,15 @@ describe Tmuxinator::Window do
         ],
         "synchronize" => synchronize,
         "layout" => "main-vertical",
-        "panes" => panes
-      }
-    }
-  end
-  let(:yaml_root) do
-    {
-      "editor" => {
-        "root" => "/project/override",
-        "root?" => true,
-        "pre" => [
-          "echo 'I get run in each pane.  Before each pane command!'",
-          nil
-        ],
-        "layout" => "main-vertical",
-        "panes" => panes
+        "panes" => panes,
+        "focused_pane" => focused_pane,
+        "root" => root,
+        "root?" => root?,
       }
     }
   end
 
   let(:window) { described_class.new(yaml, 0, project) }
-  let(:window_root) { described_class.new(yaml_root, 0, project) }
 
   shared_context "window command context" do
     let(:project) { double(:project) }
@@ -79,9 +72,19 @@ describe Tmuxinator::Window do
       end
     end
 
-    context "with window root" do
+    context "with absolute window root" do
+      let(:root) { "/project/override" }
+
       it "gets the window root" do
-        expect(window_root.root).to include("/project/override")
+        expect(window.root).to include("/project/override")
+      end
+    end
+
+    context "with relative window root" do
+      let(:root) { "relative" }
+
+      it "joins the project root" do
+        expect(window.root).to include("/project/tmuxinator/relative")
       end
     end
   end
@@ -124,6 +127,126 @@ describe Tmuxinator::Window do
 
       it "returns an empty Array" do
         expect(window.panes).to be_empty
+      end
+    end
+
+    context "titled panes" do
+      let(:panes) do
+        [
+          { "editor" => ["vim"] },
+          { "run" => ["cmd1", "cmd2"] },
+          "top"
+        ]
+      end
+
+      it "creates panes with titles" do
+        expect(window.panes).to match(
+          [
+            a_pane.with(index: 0, title: "editor").and_commands("vim"),
+            a_pane.with(index: 1, title: "run").and_commands("cmd1", "cmd2"),
+            a_pane.with(index: 2, title: nil).and_commands("top")
+          ]
+        )
+      end
+    end
+
+    context "focused pane" do
+      let(:panes) do
+        [
+          { "editor" => ["vim"] },
+          { "run" => ["cmd1"] },
+          "top"
+        ]
+      end
+
+      context "with index" do
+        let(:focused_pane) { 1 }
+        it "focuses pane by index" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.1")
+        end
+      end
+
+      context "with quoted index" do
+        let(:focused_pane) { "1" }
+
+        it "focuses pane by index" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.1")
+        end
+      end
+
+      context "with invalid index" do
+        let(:focused_pane) { 5 }
+
+        it "falls back to first" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.0")
+        end
+      end
+
+      context "with invalid quoted index" do
+        let(:focused_pane) { "5" }
+
+        it "falls back to first" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.0")
+        end
+      end
+
+      context "with negative index" do
+        let(:focused_pane) { -1 }
+
+        it "falls back to first" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.0")
+        end
+      end
+
+      context "with negative quoted index" do
+        let(:focused_pane) { "-1" }
+
+        it "falls back to first" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.0")
+        end
+      end
+
+      context "with name" do
+        let(:focused_pane) { "run" }
+        it "focuses pane by name" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.1")
+        end
+      end
+
+      context "with shell-sensitive name" do
+        let(:panes) do
+          [
+            { "editor" => ["vim"] },
+            { "dev log" => ["tail -f log/development.log"] },
+            "top"
+          ]
+        end
+        let(:focused_pane) { "dev log" }
+
+        it "focuses pane by name" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.1")
+        end
+      end
+
+      context "with invalid name" do
+        let(:focused_pane) { "invalid" }
+        it "falls back to first" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.0")
+        end
+      end
+
+      context "with nil" do
+        let(:focused_pane) { nil }
+        it "focuses first pane" do
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.0")
+        end
+      end
+
+      context "with pane base index" do
+        it "adjusts for base index" do
+          allow(project).to receive_messages(pane_base_index: 3)
+          expect(window.tmux_focus_pane_command).to eq("tmux select-pane -t test:1.3")
+        end
       end
     end
 
@@ -332,7 +455,7 @@ describe Tmuxinator::Window do
 
     let(:window_part) { "new-window" }
     let(:name_part) { window.tmux_window_name_option }
-    let(:target_part) { "-t #{window.tmux_window_target}" }
+    let(:target_part) { "-k -t #{window.tmux_window_target}" }
     let(:path_part) { "#{path_option} #{project.root}" }
 
     let(:path_option) { "-c" }
@@ -368,12 +491,6 @@ describe Tmuxinator::Window do
       it "does not set name option" do
         expect(window.tmux_new_window_command).to eq full_command
       end
-    end
-  end
-
-  describe "#tmux_select_first_pane" do
-    it "targets the pane based on the configured pane_base_index" do
-      expect(window.tmux_select_first_pane).to eq("tmux select-pane -t test:1.0")
     end
   end
 end

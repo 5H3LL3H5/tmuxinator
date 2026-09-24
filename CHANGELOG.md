@@ -1,6 +1,138 @@
 ## Unreleased
+### Fixes
+- Avoid bash-only `[[` when resolving the current session name so `stop_all` works under POSIX `/bin/sh` (e.g. dash on Debian)
+### Misc
+- Include tmux 3.7c in supported versions list
+
+## 3.4.1
+### Misc
+- Update interface snapshots for the basic fixture commands pane
+- Add `UPDATE_SNAPSHOTS` support for regenerating interface snapshots
+- Update Ruby versions tested in CI interface tests
+- Include tmux 3.7, 3.7a, and 3.7b in supported versions list
+
+## 3.4.0
+### Features
+- Add ability to focus panes via `focused_pane`
+### Fixes
+- Reintroduce `open` as an explicit create-or-open editor command
+- Reintroduce `edit` as an explicit existing-config editor command
+- Normalize project session names containing `.` or `:` to match tmux-created session names
+### Misc
+- Include tmux 3.6b in supported versions list
+
+## 3.3.8
+### Features
+- Add completion support for 'stop' command in tmuxinator
+### Misc
+- Revert gemspec required ruby version to >= 2.6
+
+## 3.3.7
+## Misc
+- Update CI tmux versions to include 3.6a
+- Include tmux 3.6a in supported versions list
+
+## 3.3.6
+### Features
+- Add `help` to the list of commands output by `tmuxinator commands`
+- Add `--help`/`-h` flag support to subcommands (start, stop, new, debug, copy, delete, list) for easier access to command-specific help
+## Misc
+- Update CI ruby versions to latest, remove Ruby 3.1
+- Update CI tmux versions to include 3.6
+- Include tmux 3.6 in supported versions list
+
+## 3.3.5
+## Misc
+- Add Ruby 3.4 to the test matrix
+- Document new from session feature in the README
+- Update required Ruby version to >=2.7 
+- Update runtime dependencies to up-to-date versions
+- Update development dependencies to up-to-date versions
+## Fixes
+- Properly pass args with equals (=) in their values
+- Fix `fish-shell` completion
+### Features
+- Add support for tmuxinator stop-all
+
+## 3.3.4
+### Features
+- Add support for tmuxinator start --append
+- Add support for tmuxinator start --no-pre-window
+### Fixes
+- Properly pass additional arguments to the start command when no command is given
+### Misc
+- Fix code coverage reporting via coveralls, now with GitHub Actions
+
+## 3.3.3
+### Features
+- Add active (-a) option to tmuxinator list
+
+## 3.3.2
+### Misc
+- Bump patch versions of Ruby 3.1, 3.2, 3.3 in the test matrix
+### tmux
+- Add tmux 3.5a to test matrix
+
+## 3.3.1
+### Misc
+- Update Ruby 3.1, 3.2, 3.3 in the test matrix; rm ruby 3.0
+### tmux
+- Add tmux 3.5 to test matrix
+- Add tmux 3.5 to supported tmux versions list
+### Fixes
+- Don't unset TMUX env variable for new-session
+
+## 3.3.0
+### Enhancements
+- Detect relative window root, join with project root
+### Fixes
+- Session path is project root, not first window root
+### Misc
+- Unpin activesupport as a development depenedency
+
+## 3.2.1
+### Enhancements
+- Use `tmux -c` if available to reduce spam
+### Fixes
+- Fix pane title configuration options only applying to first window
+
+## 3.2.0
+### Third-party Dependencies
+- Replace erubis with erubi
+- Upgrade rubocop to 0.61 for Ruby > 3.0 support
+### Enhancements
+- Add configuration options for pane titles
+### Fixes
+- Shell escape pane titles to fix multi word and special character titles
+- Replace exists? with exist? for Ruby >= 3.2
+### Misc
+- Remove `mux` alias from Fish and Bash completions
+- Add Ruby 3.2, 3.1 to the test matrix; rm ruby < 3>
+
+## 3.1.2
+### Fixes
+- Fix tmux 3.4 version in the supported versions list
+
+## 3.1.1
+### Enhancements
+- add support for stop command without project name
+- add support for optional `--project-config` flag to `tmuxinator stop` command
+### Misc
+- Fix typos and remove extra whitespace
+- Set pane title if provided in config file
+### tmux
+- Add tmux 3.4 to test matrix
+- Add tmux 3.4 to supported tmux versions list
+
+## 3.1.0
+- add a FAQ entry about how long commands may be lost/corrupted by TTY typeahead
+- increment thor minor version in tmuxinator.gemspec
+
+## 3.0.5
 ### tmux
 - add tmux 3.3a to (currently defunct) Travis test matrix; add 3.3a to supported tmux versions list
+### CI
+- replace Travis CI config with GH Actions
 
 ## 3.0.4
 ### tmux

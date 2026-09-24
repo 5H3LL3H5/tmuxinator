@@ -1,9 +1,10 @@
-require "erubis"
+# frozen_string_literal: true
+
+require "erubi"
 require "fileutils"
 require "shellwords"
 require "thor"
 require "thor/version"
-require "xdg"
 require "yaml"
 
 module Tmuxinator

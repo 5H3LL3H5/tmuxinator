@@ -1,14 +1,20 @@
-require "coveralls"
+# frozen_string_literal: true
+
 require "pry"
 require "simplecov"
-require "xdg"
 
-formatters = [
-  SimpleCov::Formatter::HTMLFormatter,
-  Coveralls::SimpleCov::Formatter
-]
-SimpleCov.formatter = SimpleCov::Formatter::MultiFormatter.new(formatters)
 SimpleCov.start do
+  if ENV["CI"]
+    formatter SimpleCov::Formatter::SimpleFormatter
+  else
+    formatter SimpleCov::Formatter::MultiFormatter.new(
+      [
+        SimpleCov::Formatter::HTMLFormatter,
+        SimpleCov::Formatter::SimpleFormatter,
+      ]
+    )
+  end
+
   add_filter "vendor/cache"
 end
 
@@ -39,7 +45,7 @@ def capture_io
 
   yield
 
-  return captured_stdout.string, captured_stderr.string
+  [captured_stdout.string, captured_stderr.string]
 ensure
   $stdout = orig_stdout
   $stderr = orig_stderr
@@ -52,11 +58,11 @@ def tmux_config(options = {})
     "bell-on-alert off",
   ]
 
-  if base_index = options.fetch(:base_index) { 1 }
+  if base_index = options.fetch(:base_index, 1)
     standard_options << "base-index #{base_index}"
   end
 
-  if pane_base_index = options.fetch(:pane_base_index) { 1 }
+  if pane_base_index = options.fetch(:pane_base_index, 1)
     standard_options << "pane-base-index #{pane_base_index}"
   end
 

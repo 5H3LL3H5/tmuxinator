@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 describe Tmuxinator::Cli do
@@ -15,7 +17,7 @@ describe Tmuxinator::Cli do
       File.new(local_project_path, "w").tap do |f|
         f.write content
       end.close
-      expect(File.exists?(local_project_path)).to be_truthy
+      expect(File.exist?(local_project_path)).to be_truthy
       expect(File.read(local_project_path)).to eq content
     end
 
@@ -26,7 +28,7 @@ describe Tmuxinator::Cli do
 
   subject(:cli) { described_class }
 
-  let(:fixtures_dir) { File.expand_path("../../../fixtures/", __FILE__) }
+  let(:fixtures_dir) { File.expand_path("../../fixtures", __dir__) }
   let(:project) { FactoryBot.build(:project) }
   let(:project_config) do
     File.join(fixtures_dir, "sample_with_project_config.yml")
@@ -93,14 +95,21 @@ describe Tmuxinator::Cli do
         context "a tmuxinator project name" do
           before do
             expect(Tmuxinator::Config).to \
-              receive(:exists?).with(name: arg1) { true }
+              receive(:exist?).with(name: arg1) { true }
           end
 
           it "should call #start" do
-            instance = instance_double(cli)
-            expect(cli).to receive(:new).and_return(instance)
-            expect(instance).to receive(:start).with(*args)
+            expect(cli).to receive(:start).with([:start, *args])
             subject
+          end
+
+          context "and the append option is passed" do
+            let(:args) { ["sample", "--append"] }
+
+            it "should call #start" do
+              expect(cli).to receive(:start).with([:start, *args])
+              subject
+            end
           end
         end
 
@@ -127,7 +136,7 @@ describe Tmuxinator::Cli do
         context "something else" do
           before do
             expect(Tmuxinator::Config).to \
-              receive(:exists?).with(name: arg1) { false }
+              receive(:exist?).with(name: arg1) { false }
           end
 
           it "should call ::start" do
@@ -189,21 +198,25 @@ describe Tmuxinator::Cli do
 
     it "lists the commands" do
       out, _err = capture_io { cli.start }
-      expected = %w(commands
-                    completions
-                    new
-                    edit
-                    open
-                    start
-                    stop
-                    local
-                    debug
-                    copy
-                    delete
-                    implode
-                    version
-                    doctor
-                    list)
+      expected = %w(
+        commands
+        completions
+        copy
+        debug
+        delete
+        doctor
+        edit
+        help
+        implode
+        local
+        list
+        new
+        open
+        start
+        stop
+        stop_all
+        version
+      )
       expect(out).to eq "#{expected.join("\n")}\n"
     end
   end
@@ -285,6 +298,24 @@ describe Tmuxinator::Cli do
       end
     end
 
+    context "with --help flag" do
+      it "shows help instead of starting project" do
+        ARGV.replace(["start", "--help"])
+        expect(Kernel).not_to receive(:exec)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("start [PROJECT] [ARGS]")
+        expect(out).to include("Options:")
+      end
+
+      it "shows help with -h flag" do
+        ARGV.replace(["start", "-h"])
+        expect(Kernel).not_to receive(:exec)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("start [PROJECT] [ARGS]")
+        expect(out).to include("Options:")
+      end
+    end
+
     context "deprecations" do
       before do
         allow($stdin).to receive_messages(getc: "y")
@@ -303,14 +334,14 @@ describe Tmuxinator::Cli do
 
   describe "#stop" do
     before do
-      ARGV.replace(["stop", "foo"])
       allow(Tmuxinator::Config).to receive_messages(validate: project)
       allow(Tmuxinator::Config).to receive_messages(version: 1.9)
       allow(Kernel).to receive(:exec)
     end
 
     context "with project name" do
-      it "stop the project" do
+      it "stops the project" do
+        ARGV.replace(["stop", "foo"])
         expect(Kernel).to receive(:exec)
         out, err = capture_io { cli.start }
         expect(err).to eq ""
@@ -318,7 +349,80 @@ describe Tmuxinator::Cli do
       end
     end
 
+    context "without project name" do
+      it "stops the project using .tmuxinator.yml" do
+        ARGV.replace(["stop"])
+        expect(Kernel).to receive(:exec)
+        out, err = capture_io { cli.start }
+        expect(err).to eq ""
+        expect(out).to eq ""
+      end
+    end
+
+    context "with --help flag" do
+      it "shows help instead of stopping project" do
+        ARGV.replace(["stop", "--help"])
+        expect(Kernel).not_to receive(:exec)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("stop [PROJECT]")
+        expect(out).to include("Options:")
+      end
+    end
+
     include_examples :unsupported_version_message, :stop, :foo
+  end
+
+  describe "#stop(with project config file)" do
+    before do
+      allow(Tmuxinator::Config).to receive(:validate).and_call_original
+      allow(Tmuxinator::Config).to receive_messages(version: 1.9)
+      allow(Kernel).to receive(:exec)
+    end
+
+    it "stops the project" do
+      ARGV.replace(["stop", "--project-config=#{project_config}"])
+      expect(Tmuxinator::Config).to receive_messages(validate: project)
+      expect(Kernel).to receive(:exec)
+      out, err = capture_io { cli.start }
+      expect(err).to eq ""
+      expect(out).to eq ""
+    end
+
+    it "does not stop the project if given a bogus project config file" do
+      ARGV.replace(["stop", "--project-config=bogus.yml"])
+      expect(Kernel).not_to receive(:exec)
+      expect { capture_io { cli.start } }.to raise_error(SystemExit)
+    end
+
+    it "does not set the project name" do
+      ARGV.replace(["stop", "--project-config=#{project_config}"])
+      expect(Tmuxinator::Config).
+        to(receive(:validate).
+           with(hash_including(name: nil)))
+      capture_io { cli.start }
+    end
+
+    it "does not set the project name even when set" do
+      ARGV.replace(["stop", "bar", "--project-config=#{project_config}"])
+      expect(Tmuxinator::Config).
+        to(receive(:validate).
+           with(hash_including(name: nil)))
+      capture_io { cli.start }
+    end
+  end
+
+  describe "#stop_all" do
+    before do
+      allow(Tmuxinator::Config).to receive_messages(validate: project)
+      allow(Tmuxinator::Config).to receive_messages(version: 1.9)
+    end
+
+    it "stops all projects" do
+      ARGV.replace(["stop-all", "--noconfirm"])
+      out, err = capture_io { cli.start }
+      expect(err).to eq ""
+      expect(out).to eq ""
+    end
   end
 
   describe "#local" do
@@ -413,6 +517,16 @@ describe Tmuxinator::Cli do
     let(:name) { "test" }
     let(:path) { Tmuxinator::Config.default_project(name) }
 
+    context "with --help flag" do
+      it "shows help instead of editing a project" do
+        ARGV.replace(["edit", "--help"])
+        out, _err = capture_io { cli.start }
+        expect(out).to include("edit [PROJECT]")
+        expect(out).to include("Use local project file at ./.tmuxinator.yml")
+        expect(out).to include("Options:")
+      end
+    end
+
     context "when the project file _does_ already exist" do
       let(:extra) { "  - extra: echo 'foobar'" }
 
@@ -441,6 +555,84 @@ describe Tmuxinator::Cli do
         expect(File.read(path)).to match %r{#{extra}}
       end
     end
+
+    context "when the project file does not already exist" do
+      let(:path) { File.join(Dir.tmpdir, "#{name}.yml") }
+
+      before do
+        allow(Tmuxinator::Config).to receive(:default_project).and_call_original
+        allow(Tmuxinator::Config).to receive(:default_project).
+          with(name).and_return(path)
+        ARGV.replace(["edit", name])
+        allow(File).to receive(:exist?).with(anything).and_call_original
+        allow(File).to receive(:exist?).with(path).and_return(false)
+      end
+
+      it "exits instead of generating a project file" do
+        expect { cli.start }.to raise_error(SystemExit)
+        expect(File).not_to exist(path)
+      end
+    end
+  end
+
+  describe "#open" do
+    let(:file) { StringIO.new }
+    let(:name) { "test" }
+    let(:path) { Tmuxinator::Config.default_project(name) }
+
+    context "with --help flag" do
+      it "shows help instead of opening a project" do
+        ARGV.replace(["open", "--help"])
+        out, _err = capture_io { cli.start }
+        expect(out).to include("open [PROJECT]")
+        expect(out).to include("Use local project file at ./.tmuxinator.yml")
+        expect(out).to include("Options:")
+      end
+    end
+
+    context "when the project file does not already exist" do
+      before do
+        ARGV.replace(["open", name])
+        allow(File).to receive(:open) { |&block| block.yield file }
+        allow(File).to receive(:exist?).with(anything).and_return(false)
+      end
+
+      it "creates and opens a tmuxinator project file" do
+        expect(Kernel).to receive(:system).with(%r{#{path}})
+
+        capture_io { cli.start }
+
+        expect(file.string).to_not be_empty
+      end
+    end
+
+    context "when the project file already exists" do
+      let(:extra) { "  - extra: echo 'foobar'" }
+      let(:path) { File.join(Dir.tmpdir, "#{name}.yml") }
+
+      before do
+        allow(Tmuxinator::Config).to receive(:default_project).and_call_original
+        allow(Tmuxinator::Config).to receive(:default_project).
+          with(name).and_return(path)
+        FileUtils.remove_file(path) if File.exist?(path)
+        expect(described_class.new.generate_project_file(name, path)).to eq path
+
+        File.open(path, "w") do |f|
+          f.write(extra)
+          f.flush
+        end
+
+        ARGV.replace(["open", name])
+      end
+
+      it "opens the existing project file without replacing it" do
+        expect(Kernel).to receive(:system).with(%r{#{path}})
+
+        capture_io { cli.start }
+
+        expect(File.read(path)).to match %r{#{extra}}
+      end
+    end
   end
 
   describe "#new" do
@@ -449,6 +641,16 @@ describe Tmuxinator::Cli do
 
     before do
       allow(File).to receive(:open) { |&block| block.yield file }
+    end
+
+    context "with --help flag" do
+      it "shows help instead of creating project" do
+        ARGV.replace(["new", "--help"])
+        out, _err = capture_io { cli.start }
+        expect(out).to include("new [PROJECT]")
+        expect(out).to include("Use local project file at ./.tmuxinator.yml")
+        expect(out).to include("Options:")
+      end
     end
 
     context "without the --local option" do
@@ -515,27 +717,34 @@ describe Tmuxinator::Cli do
 
     # this command variant only works for tmux version 1.6 and up.
     context "from a session" do
-      context "with tmux >= 1.6", if: Tmuxinator::Config.version >= 1.6 do
+      context "with tmux >= 1.6" do
+        let(:success_status) { instance_double(Process::Status, success?: true) }
+        let(:failure_status) { instance_double(Process::Status, success?: false) }
+
         before do
-          # Necessary to make `Doctor.installed?` work in specs
-          allow(Tmuxinator::Doctor).to receive(:installed?).and_return(true)
+          allow(Tmuxinator::Config).to receive(:version).and_return(1.6)
         end
 
         context "session exists" do
-          before(:all) do
-            # Can't add variables through `let` in `before :all`.
-            @session = "for-testing-tmuxinator"
-            # Pass the -d option, so that the session is not attached.
-            Kernel.system "tmux new-session -d -s #{@session}"
-          end
-
           before do
-            ARGV.replace ["new", name, @session]
-          end
-
-          after(:all) do
-            puts @session
-            Kernel.system "tmux kill-session -t #{@session}"
+            ARGV.replace ["new", name, "existing-session"]
+            allow(Open3).to receive(:capture3).and_return(
+              [
+                "editor tiled 1 /workspace/app\n",
+                "",
+                success_status,
+              ],
+              [
+                "editor /workspace/app\n",
+                "",
+                success_status,
+              ],
+              [
+                "default-path \"/workspace/app\"\n",
+                "",
+                success_status,
+              ]
+            )
           end
 
           it "creates a project file" do
@@ -549,6 +758,11 @@ describe Tmuxinator::Cli do
         context "session doesn't exist" do
           before do
             ARGV.replace ["new", name, "sessiondoesnotexist"]
+            allow(Open3).to receive(:capture3).and_return(
+              ["", "", failure_status],
+              ["", "", failure_status],
+              ["", "", failure_status]
+            )
           end
 
           it "fails" do
@@ -573,7 +787,32 @@ describe Tmuxinator::Cli do
   describe "#copy" do
     before do
       ARGV.replace(["copy", "foo", "bar"])
-      allow(Tmuxinator::Config).to receive(:exists?) { true }
+      allow(Tmuxinator::Config).to receive(:exist?) { true }
+    end
+
+    context "with --help flag" do
+      it "shows help instead of copying project" do
+        ARGV.replace(["copy", "--help"])
+        expect(FileUtils).not_to receive(:copy_file)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("copy [EXISTING] [NEW]")
+        expect(out).to include("Options:")
+      end
+
+      it "shows help with -h flag" do
+        ARGV.replace(["copy", "-h"])
+        expect(FileUtils).not_to receive(:copy_file)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("copy [EXISTING] [NEW]")
+        expect(out).to include("Options:")
+      end
+
+      it "shows help when only one argument provided" do
+        ARGV.replace(["copy", "foo"])
+        expect(FileUtils).not_to receive(:copy_file)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("copy [EXISTING] [NEW]")
+      end
     end
 
     context "new project already exists" do
@@ -589,7 +828,7 @@ describe Tmuxinator::Cli do
 
     context "existing project doesn't exist" do
       before do
-        allow(Tmuxinator::Config).to receive(:exists?) { false }
+        allow(Tmuxinator::Config).to receive(:exist?) { false }
       end
 
       it "exit with error code" do
@@ -650,13 +889,38 @@ describe Tmuxinator::Cli do
       end
 
       it "does not render the project if given a bogus project config file" do
-        ARGV.replace(["start", "--project-config=bogus.yml"])
+        ARGV.replace(["debug", "--project-config=bogus.yml"])
         expect { capture_io { cli.start } }.to raise_error(SystemExit)
       end
     end
   end
 
   describe "#delete" do
+    context "with --help flag" do
+      it "shows help instead of deleting project" do
+        ARGV.replace(["delete", "--help"])
+        expect(FileUtils).not_to receive(:rm)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("delete [PROJECT1] [PROJECT2]")
+        expect(out).to include("Options:")
+      end
+
+      it "shows help with -h flag" do
+        ARGV.replace(["delete", "-h"])
+        expect(FileUtils).not_to receive(:rm)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("delete [PROJECT1] [PROJECT2]")
+        expect(out).to include("Options:")
+      end
+
+      it "shows help when no arguments provided" do
+        ARGV.replace(["delete"])
+        expect(FileUtils).not_to receive(:rm)
+        out, _err = capture_io { cli.start }
+        expect(out).to include("delete [PROJECT1] [PROJECT2]")
+      end
+    end
+
     context "with a single argument" do
       before do
         ARGV.replace(["delete", "foo"])
@@ -665,7 +929,7 @@ describe Tmuxinator::Cli do
 
       context "project exists" do
         before do
-          allow(Tmuxinator::Config).to receive(:exists?) { true }
+          allow(Tmuxinator::Config).to receive(:exist?) { true }
         end
 
         it "deletes the project" do
@@ -676,7 +940,7 @@ describe Tmuxinator::Cli do
 
       context "local project exists" do
         before do
-          allow(Tmuxinator::Config).to receive(:exists?) { true }
+          allow(Tmuxinator::Config).to receive(:exist?) { true }
           expect(Tmuxinator::Config).to receive(:project) { "local" }
         end
 
@@ -688,7 +952,7 @@ describe Tmuxinator::Cli do
 
       context "project doesn't exist" do
         before do
-          allow(Tmuxinator::Config).to receive(:exists?) { false }
+          allow(Tmuxinator::Config).to receive(:exist?) { false }
         end
 
         it "outputs an error message" do
@@ -705,7 +969,7 @@ describe Tmuxinator::Cli do
 
       context "all projects exist" do
         before do
-          allow(Tmuxinator::Config).to receive(:exists?).and_return(true)
+          allow(Tmuxinator::Config).to receive(:exist?).and_return(true)
         end
 
         it "deletes the projects" do
@@ -716,10 +980,10 @@ describe Tmuxinator::Cli do
 
       context "only one project exists" do
         before do
-          allow(Tmuxinator::Config).to receive(:exists?).with(name: "foo") {
+          allow(Tmuxinator::Config).to receive(:exist?).with(name: "foo") {
             true
           }
-          allow(Tmuxinator::Config).to receive(:exists?).with(name: "bar") {
+          allow(Tmuxinator::Config).to receive(:exist?).with(name: "bar") {
             false
           }
         end
@@ -736,7 +1000,7 @@ describe Tmuxinator::Cli do
 
       context "all projects do not exist" do
         before do
-          allow(Tmuxinator::Config).to receive(:exists?).and_return(false)
+          allow(Tmuxinator::Config).to receive(:exist?).and_return(false)
         end
 
         it "outputs multiple error messages" do
@@ -794,6 +1058,14 @@ describe Tmuxinator::Cli do
       end
     end
 
+    context "set --active flag " do
+      ARGV.replace(["list", "--active"])
+
+      it "is a valid option" do
+        expect { capture_io { cli.start } }.to_not raise_error
+      end
+    end
+
     context "no arguments are given" do
       ARGV.replace(["list"])
 
@@ -841,7 +1113,7 @@ describe Tmuxinator::Cli do
       end
 
       it "should generate a project file" do
-        new_path = described_class.new.find_project_file(name, false)
+        new_path = described_class.new.find_project_file(name, local: false)
         expect(new_path).to eq path
         expect(File).to exist new_path
       end
@@ -863,7 +1135,7 @@ describe Tmuxinator::Cli do
       end
 
       it "should _not_ generate a new project file" do
-        new_path = described_class.new.find_project_file(name, false)
+        new_path = described_class.new.find_project_file(name, local: false)
         expect(new_path).to eq path
         expect(File).to exist new_path
         expect(File.read(new_path)).to match %r{#{extra}}
@@ -903,7 +1175,7 @@ describe Tmuxinator::Cli do
     let(:name) { "sample" }
     let(:custom_name) { nil }
     let(:cli_options) { {} }
-    let(:path) { File.expand_path("../../../fixtures", __FILE__) }
+    let(:path) { File.expand_path("../../fixtures", __dir__) }
 
     shared_examples_for :a_proper_project do
       it "should create a valid project" do

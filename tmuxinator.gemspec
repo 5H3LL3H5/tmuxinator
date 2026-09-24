@@ -1,6 +1,7 @@
 # coding: utf-8
+# frozen_string_literal: true
 
-lib = File.expand_path("../lib", __FILE__)
+lib = File.expand_path("lib", __dir__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require "tmuxinator/version"
 
@@ -36,24 +37,19 @@ Gem::Specification.new do |s|
     __________________________________________________________
   }
 
-  s.required_rubygems_version = ">= 1.8.23"
-  s.required_ruby_version = ">= 2.6.7"
+  s.required_rubygems_version = Gem::Requirement.new(">= 2.7")
+  # Keep installation working on system macOS Ruby even though development targets newer Ruby.
+  s.required_ruby_version = ">= 2.6"
 
-  s.add_dependency "erubis", "~> 2.6"
-  s.add_dependency "thor", "~> 1.2.1"
-  s.add_dependency "xdg", "~> 2.2", ">= 2.2.5"
+  s.add_dependency "erubi", "~> 1.13"
+  s.add_dependency "thor", "~> 1.4.0"
 
-  s.add_development_dependency "activesupport", "< 5.0.0" # Please see issue #432
-  s.add_development_dependency "awesome_print", "~> 1.2"
+  s.add_development_dependency "amazing_print", "~> 1.8"
   s.add_development_dependency "bundler", ">= 1.3"
-  s.add_development_dependency "coveralls", "~> 0.8"
-  s.add_development_dependency "factory_bot", "~> 4.8"
-  s.add_development_dependency "pry", "~> 0.10"
-  s.add_development_dependency "rake", "~> 12.3.3"
-  s.add_development_dependency "rspec", "~> 3.3"
-  s.add_development_dependency "rubocop", "~> 0.48.1"
-  s.add_development_dependency "simplecov", "~> 0.16"
-
-  # quiet "Gem.gunzip is deprecated" deprecation warning caused by rubocop
-  s.add_development_dependency "unicode-display_width", "~> 1.3"
+  s.add_development_dependency "factory_bot", "~> 6.5"
+  s.add_development_dependency "pry", "~> 0.15"
+  s.add_development_dependency "rake", "~> 13.3"
+  s.add_development_dependency "rspec", "~> 3.13"
+  s.add_development_dependency "rubocop", "~> 1.79"
+  s.add_development_dependency "simplecov", "~> 0.22"
 end

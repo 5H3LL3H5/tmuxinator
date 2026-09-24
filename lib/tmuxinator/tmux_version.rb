@@ -1,6 +1,18 @@
+# frozen_string_literal: true
+
 module Tmuxinator
   module TmuxVersion
     SUPPORTED_TMUX_VERSIONS = [
+      "3.7c",
+      "3.7b",
+      "3.7a",
+      3.7,
+      "3.6b",
+      "3.6a",
+      3.6,
+      "3.5a",
+      3.5,
+      3.4,
       "3.3a",
       3.3,
       "3.2a",
@@ -28,7 +40,7 @@ module Tmuxinator
       1.6,
       1.5,
     ].freeze
-    UNSUPPORTED_VERSION_MSG = <<-MSG.freeze
+    UNSUPPORTED_VERSION_MSG = <<-MSG
     WARNING: You are running tmuxinator with an unsupported version of tmux.
     Please consider using a supported version:
     (#{SUPPORTED_TMUX_VERSIONS.join(', ')})

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Tmuxinator
   class Window
     include Tmuxinator::Util
@@ -15,7 +17,7 @@ module Tmuxinator
     end
 
     def panes
-      build_panes(yaml["panes"]) || []
+      @panes ||= build_panes(yaml["panes"]) || []
     end
 
     def _hashed?
@@ -27,19 +29,23 @@ module Tmuxinator
     end
 
     def layout
-      yaml["layout"] ? yaml["layout"].shellescape : nil
+      yaml["layout"]&.shellescape
     end
 
     def synchronize
       yaml["synchronize"] || false
     end
 
+    # The expanded, joined window root path
+    # Relative paths are joined to the project root
     def root
-      _yaml_root || _project_root
+      return _project_root unless _yaml_root
+
+      File.expand_path(_yaml_root, _project_root).shellescape
     end
 
     def _yaml_root
-      File.expand_path(yaml["root"]).shellescape if yaml["root"]
+      yaml["root"]
     end
 
     def _project_root
@@ -50,16 +56,16 @@ module Tmuxinator
       return if panes_yml.nil?
 
       Array(panes_yml).map.with_index do |pane_yml, index|
-        commands =  case pane_yml
-                    when Hash
-                      pane_yml.values.first
-                    when Array
-                      pane_yml
-                    else
-                      pane_yml
-                    end
+        commands, title = case pane_yml
+                          when Hash
+                            [pane_yml.values.first, pane_yml.keys.first]
+                          when Array
+                            [pane_yml, nil]
+                          else
+                            [pane_yml, nil]
+                          end
 
-        Tmuxinator::Pane.new(index, project, self, *commands)
+        Tmuxinator::Pane.new(index, project, self, *commands, title: title)
       end.flatten
     end
 
@@ -113,11 +119,15 @@ module Tmuxinator
 
     def tmux_new_window_command
       path = root? ? "#{Tmuxinator::Config.default_path_option} #{root}" : nil
-      "#{project.tmux} new-window #{path} -t #{tmux_window_target} #{tmux_window_name_option}"
+      "#{project.tmux} new-window #{path} -k -t #{tmux_window_target} #{tmux_window_name_option}"
     end
 
     def tmux_tiled_layout_command
       "#{project.tmux} select-layout -t #{tmux_window_target} tiled"
+    end
+
+    def tmux_focus_pane_command
+      "#{project.tmux} select-pane -t #{focused_pane}"
     end
 
     def tmux_synchronize_panes
@@ -128,16 +138,46 @@ module Tmuxinator
       "#{project.tmux} select-layout -t #{tmux_window_target} #{layout}"
     end
 
-    def tmux_select_first_pane
-      "#{project.tmux} select-pane -t #{tmux_window_target}.#{panes.first.index + project.pane_base_index}"
-    end
-
     def synchronize_before?
-      synchronize == true || synchronize == "before"
+      [true, "before"].include?(synchronize)
     end
 
     def synchronize_after?
       synchronize == "after"
+    end
+
+    private
+
+    def focused_pane
+      "#{tmux_window_target}.#{tmux_pane_index}"
+    end
+
+    def tmux_pane_index
+      # Adjust for tmux pane base index
+      pane_index + project.pane_base_index
+    end
+
+    def pane_index
+      focused_pane_config = yaml["focused_pane"]
+      # Select the first pane if the user hasn't set focused_pane
+      return 0 unless focused_pane_config
+
+      # The user may provide the focused pane index.
+      if integer?(focused_pane_config)
+        idx = Integer(focused_pane_config)
+        return idx if idx >= 0 && panes[idx]
+
+        return 0
+      end
+
+      # If no pane with the given name is found fall back to the first pane
+      panes.index { |pane| pane.title == focused_pane_config.to_s.shellescape } || 0
+    end
+
+    def integer?(str)
+      !!Integer(str)
+    rescue StandardError
+      false
     end
   end
 end

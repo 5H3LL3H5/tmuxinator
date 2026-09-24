@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 describe Tmuxinator::Project do
@@ -35,6 +37,10 @@ describe Tmuxinator::Project do
     FactoryBot.build(:project_with_alias)
   end
 
+  let(:project_with_append) do
+    FactoryBot.build(:project_with_append)
+  end
+
   it "should include Hooks" do
     expect(project).to be_kind_of(Tmuxinator::Hooks::Project)
   end
@@ -44,6 +50,21 @@ describe Tmuxinator::Project do
       it "creates an instance" do
         expect(project).to be_a(Tmuxinator::Project)
       end
+
+      it "validates append outside a current session" do
+        Tmuxinator::Project.any_instance.stub(tmux_has_session?: false)
+        expect { project_with_append }.to(
+          raise_error(
+            RuntimeError,
+            "Cannot append to a session that does not exist"
+          )
+        )
+      end
+
+      it "validates append within a current session" do
+        Tmuxinator::Project.any_instance.stub(tmux_has_session?: true)
+        expect { project_with_append }.to_not raise_error
+      end
     end
   end
 
@@ -52,9 +73,39 @@ describe Tmuxinator::Project do
       expect(project.render).to_not be_empty
     end
 
+    it "renders focused pane selection for a window" do
+      project.yaml["windows"][0]["editor"]["focused_pane"] = 2
+
+      expect(project.render).to include("select-pane -t sample:0.2")
+    end
+
+    it "renders startup pane selection when configured" do
+      project.yaml["startup_pane"] = 3
+
+      expect(project.render).to include("select-pane -t sample:0.3")
+    end
+
+    it "preserves first-pane startup selection when startup_pane is omitted" do
+      project.yaml["startup_window"] = "editor"
+      project.yaml["windows"][0]["editor"]["focused_pane"] = "guard"
+      project.yaml["windows"][0]["editor"]["panes"] = [
+        { "editor" => "vim" },
+        { "guard" => "bundle exec guard" }
+      ]
+
+      expect(project.render).to include("select-pane -t sample:0.1")
+      expect(project.render).to include("select-pane -t sample:editor.0")
+    end
+
     context "wemux" do
       it "renders the wemux config" do
         expect(wemux_project.render).to_not be_empty
+      end
+
+      it "renders focused pane selection for a window" do
+        wemux_project.yaml["windows"][0]["editor"]["focused_pane"] = 2
+
+        expect(wemux_project.render).to include("select-pane -t wemux:0.2")
       end
     end
 
@@ -181,6 +232,22 @@ describe Tmuxinator::Project do
       end
     end
 
+    context "with dots" do
+      it "uses the session name tmux creates" do
+        project.yaml["project_name"] = "home.arpa"
+
+        expect(project.name).to eq "home_arpa"
+      end
+    end
+
+    context "with colons" do
+      it "uses the session name tmux creates" do
+        project.yaml["project_name"] = "home:arpa"
+
+        expect(project.name).to eq "home_arpa"
+      end
+    end
+
     context "as emoji" do
       it "will gracefully handle a name given as an emoji" do
         rendered = project_with_emoji_as_name
@@ -258,6 +325,16 @@ describe Tmuxinator::Project do
         it "still gets the correct pre_window command" do
           expect(project.pre_window).to be_nil
         end
+      end
+    end
+
+    context "no_pre_window option is true" do
+      before do
+        allow(project).to receive_messages(no_pre_window: true)
+      end
+
+      it "returns nil" do
+        expect(pre_window).to be_nil
       end
     end
   end
@@ -366,6 +443,17 @@ describe Tmuxinator::Project do
         expect(project.base_index).to eq 0
       end
     end
+
+    context "with append set" do
+      before do
+        Tmuxinator::Project.any_instance.stub(tmux_has_session?: true)
+        project_with_append.stub(last_window_index: 3)
+      end
+
+      it "defaults to the next window index" do
+        expect(project_with_append.base_index).to eq 4
+      end
+    end
   end
 
   describe "#startup_window" do
@@ -386,20 +474,57 @@ describe Tmuxinator::Project do
     end
   end
 
+  describe "#tmux_startup_pane_command" do
+    context "with integer" do
+      it "returns command with index" do
+        project.yaml["startup_pane"] = 1
+
+        expect(project.tmux_startup_pane_command).
+          to match("select-pane -t sample:0.1")
+      end
+    end
+
+    context "with nil" do
+      it "returns command for first pane in startup window" do
+        project.yaml["startup_pane"] = nil
+
+        expect(project.tmux_startup_pane_command).
+          to eq("tmux -f ~/.tmux.mac.conf -L foo select-pane -t sample:0.0")
+      end
+    end
+
+    context "with blank string" do
+      it "treats startup_pane as unset" do
+        project.yaml["startup_pane"] = ""
+
+        expect(project.tmux_startup_pane_command).
+          to eq("tmux -f ~/.tmux.mac.conf -L foo select-pane -t sample:0.0")
+      end
+    end
+  end
+
   describe "#startup_pane" do
-    context "startup pane specified" do
-      it "get the startup pane index from project config" do
+    context "with startup pane configured" do
+      it "returns the configured pane target" do
         project.yaml["startup_pane"] = 1
 
         expect(project.startup_pane).to eq("sample:0.1")
       end
     end
 
-    context "startup pane not specified" do
-      it "returns the base pane instead" do
-        allow(project).to receive_messages(pane_base_index: 4)
+    context "with startup pane unset" do
+      it "returns the first pane in the startup window" do
+        project.yaml["startup_pane"] = nil
 
-        expect(project.startup_pane).to eq("sample:0.4")
+        expect(project.startup_pane).to eq("sample:0.0")
+      end
+    end
+
+    context "with startup pane blank" do
+      it "treats the pane as unset" do
+        project.yaml["startup_pane"] = ""
+
+        expect(project.startup_pane).to eq("sample:0.0")
       end
     end
   end
@@ -407,6 +532,13 @@ describe Tmuxinator::Project do
   describe "#window" do
     it "gets the window and index for tmux" do
       expect(project.window(1)).to eq "sample:1"
+    end
+
+    context "with append set" do
+      it "excludes the session name" do
+        Tmuxinator::Project.any_instance.stub(tmux_has_session?: true)
+        expect(project_with_append.window(1)).to eq ":1"
+      end
     end
   end
 
@@ -574,6 +706,13 @@ describe Tmuxinator::Project do
         expect(project.tmux_new_session_command).to eq command
       end
     end
+
+    context "with append set" do
+      it "returns nothing" do
+        Tmuxinator::Project.any_instance.stub(tmux_has_session?: true)
+        expect(project_with_append.tmux_new_session_command).to be_nil
+      end
+    end
   end
 
   describe "tmux_kill_session_command" do
@@ -589,7 +728,7 @@ describe Tmuxinator::Project do
   end
 
   describe "::load" do
-    let(:path) { File.expand_path("../../../fixtures/sample.yml", __FILE__) }
+    let(:path) { File.expand_path("../../fixtures/sample.yml", __dir__) }
     let(:options) { {} }
 
     it "should raise if the project file doesn't parse" do
@@ -609,7 +748,7 @@ describe Tmuxinator::Project do
   end
 
   describe "::parse_settings" do
-    let(:args) { ["one", "two=three"] }
+    let(:args) { ["one", "two=three", "four=five=six"] }
 
     it "returns settings in a hash" do
       expect(described_class.parse_settings(args)["two"]).to eq("three")
@@ -618,6 +757,10 @@ describe Tmuxinator::Project do
     it "removes settings from args" do
       described_class.parse_settings(args)
       expect(args).to eq(["one"])
+    end
+
+    it "handles equals signs in values" do
+      expect(described_class.parse_settings(args)["four"]).to eq("five=six")
     end
   end
 
@@ -633,6 +776,79 @@ describe Tmuxinator::Project do
       expect do
         noname_project.validate!
       end.to raise_error RuntimeError, %r{didn't.specify.a.'project_name'}
+    end
+  end
+
+  describe "#pane_titles" do
+    before do
+      allow(project).to receive(:tmux).and_return "tmux"
+    end
+
+    context "pane_titles not enabled" do
+      before { project.yaml["enable_pane_titles"] = false }
+
+      it "returns false" do
+        expect(project.enable_pane_titles?).to be false
+      end
+    end
+
+    context "pane_titles enabled" do
+      before { project.yaml["enable_pane_titles"] = true }
+
+      it "returns true" do
+        expect(project.enable_pane_titles?).to be true
+      end
+    end
+
+    context "pane_title_position not configured" do
+      before { project.yaml["pane_title_position"] = nil }
+
+      it "configures a default position of top" do
+        expect(project.tmux_set_pane_title_position("x")).to eq(
+          "tmux set-window-option -t x pane-border-status top"
+        )
+      end
+    end
+
+    context "pane_title_position configured" do
+      before { project.yaml["pane_title_position"] = "bottom" }
+
+      it "configures a position of bottom" do
+        expect(project.tmux_set_pane_title_position("x")).to eq(
+          "tmux set-window-option -t x pane-border-status bottom"
+        )
+      end
+    end
+
+    context "pane_title_position invalid" do
+      before { project.yaml["pane_title_position"] = "other" }
+
+      it "configures the default position" do
+        expect(project.tmux_set_pane_title_position("x")).to eq(
+          "tmux set-window-option -t x pane-border-status top"
+        )
+      end
+    end
+
+    context "pane_title_format not configured" do
+      before { project.yaml["pane_title_format"] = nil }
+
+      it "configures a default format" do
+        resp = ""\
+          "tmux set-window-option -t x pane-border-format"\
+          " \"\#{pane_index}: \#{pane_title}\""
+        expect(project.tmux_set_pane_title_format("x")).to eq(resp)
+      end
+    end
+
+    context "pane_title_format configured" do
+      before { project.yaml["pane_title_format"] = " [ #T ] " }
+
+      it "configures the provided format" do
+        expect(project.tmux_set_pane_title_format("x")).to eq(
+          'tmux set-window-option -t x pane-border-format " [ #T ] "'
+        )
+      end
     end
   end
 end

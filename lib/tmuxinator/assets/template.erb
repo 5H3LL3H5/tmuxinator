@@ -1,30 +1,28 @@
 #!<%= ENV["SHELL"] || "/bin/bash" %>
 
-# Clear rbenv variables before starting tmux
-unset RBENV_VERSION
-unset RBENV_DIR
 
-<%= tmux %> start-server;
+<%- if !append? -%>
+  # Clear rbenv variables before starting tmux
+  unset RBENV_VERSION
+  unset RBENV_DIR
+
+  <%= tmux %> start-server;
+<%- end -%>
 
 cd <%= root || "." %>
 
 # Run on_project_start command.
 <%= hook_on_project_start %>
 
-<%- if !tmux_has_session? name -%>
+<%- if append? || !tmux_has_session?(name) -%>
 
   # Run pre command.
   <%= pre %>
-  
+
   # Run on_project_first_start command.
   <%= hook_on_project_first_start %>
 
-  # Create the session and the first window. Manually switch to root
-  # directory if required to support tmux < 1.9
-  TMUX= <%= tmux_new_session_command %>
-  <% if windows.first.root? %>
-  <%= windows.first.tmux_window_command_prefix %> <%= "cd #{windows.first.root}".shellescape %> C-m
-  <% end %>
+  <%= tmux_new_session_command %>
 
   <% if Tmuxinator::Config.version < 1.7 %>
   # Set the default path for versions prior to 1.7
@@ -33,8 +31,17 @@ cd <%= root || "." %>
     <% end %>
   <% end %>
 
-  # Create other windows.
-  <% windows.drop(1).each do |window| %>
+  <% if enable_pane_titles? %>
+    <% if Tmuxinator::Config.version < 2.6 %>
+  <%= pane_titles_not_supported_warning %>
+    <% end %>
+    <% if pane_title_position? && !pane_title_position_valid? %>
+  <%= pane_title_position_not_valid_warning %>
+    <% end %>
+  <% end %>
+
+  # Create windows.
+  <% windows.each do |window| %>
   <%= window.tmux_new_window_command %>
   <% end %>
 
@@ -44,6 +51,12 @@ cd <%= root || "." %>
     <% if window.synchronize_before? %>
   <%= window.tmux_synchronize_panes %>
     <% end %>
+
+    <% if enable_pane_titles? && Tmuxinator::Config.version >= 2.6 %>
+  <%= tmux_set_pane_title_position(window.tmux_window_target) %>
+  <%= tmux_set_pane_title_format(window.tmux_window_target) %>
+    <% end %>
+
     <% unless window.panes? %>
       <% if window.project.pre_window %>
   <%= window.tmux_pre_window_command %>
@@ -53,6 +66,9 @@ cd <%= root || "." %>
       <% end %>
     <% else %>
       <% window.panes.each do |pane| %>
+        <% unless Tmuxinator::Config.version < 2.6 %>
+  <%= pane.tmux_set_title %>
+        <% end %>
         <% if pane.project.pre_window %>
   <%= pane.tmux_pre_window_command %>
         <% end %>
@@ -70,7 +86,7 @@ cd <%= root || "." %>
       <% end %>
 
   <%= window.tmux_layout_command %>
-  <%= window.tmux_select_first_pane %>
+  <%= window.tmux_focus_pane_command %>
     <% end %>
 
     <% if window.synchronize_after? %>
@@ -79,13 +95,13 @@ cd <%= root || "." %>
   <% end %>
 
   <%= tmux %> select-window -t <%= startup_window %>
-  <%= tmux %> select-pane -t <%= startup_pane %>
+  <%= tmux_startup_pane_command %>
 <%- else -%>
   # Run on_project_restart command.
   <%= hook_on_project_restart %>
 <%- end -%>
 
-<%- if attach? -%>
+<%- if attach? && !append? -%>
   if [ -z "$TMUX" ]; then
     <%= tmux %> -u attach-session -t <%= name %>
   else
@@ -94,6 +110,6 @@ cd <%= root || "." %>
 <%- end -%>
 
 <%= post %>
-    
+
 # Run on_project_exit command.
 <%= hook_on_project_exit %>

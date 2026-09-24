@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 def yaml_load(file)
   YAML.safe_load(File.read(File.expand_path(file)))
 end
@@ -112,5 +114,13 @@ FactoryBot.define do
     end
 
     initialize_with { Tmuxinator::Project.load(file) }
+  end
+
+  factory :project_with_append, class: Tmuxinator::Project do
+    transient do
+      file { "spec/fixtures/sample.yml" }
+    end
+
+    initialize_with { Tmuxinator::Project.load(file, append: true) }
   end
 end

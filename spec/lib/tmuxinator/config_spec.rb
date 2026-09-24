@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 describe Tmuxinator::Config do
-  let(:fixtures_dir) { File.expand_path("../../../fixtures/", __FILE__) }
+  let(:fixtures_dir) { File.expand_path("../../fixtures", __dir__) }
   let(:xdg_config_dir) { "#{fixtures_dir}/xdg-tmuxinator" }
   let(:home_config_dir) { "#{fixtures_dir}/dot-tmuxinator" }
 
@@ -52,8 +54,9 @@ describe Tmuxinator::Config do
         allow(described_class).to receive(:home?).and_return false
 
         Dir.mktmpdir do |dir|
-          config_parent = "#{dir}/non_existant_parent/s"
-          allow(XDG).to receive(:[]).with("CONFIG").and_return config_parent
+          config_parent = "#{dir}/non_existent_parent/s"
+          allow(ENV).to receive(:fetch).with("XDG_CONFIG_HOME", "~/.config").
+            and_return config_parent
           expect(described_class.directory).
             to eq "#{config_parent}/tmuxinator"
           expect(File.directory?("#{config_parent}/tmuxinator")).to be true
@@ -62,12 +65,11 @@ describe Tmuxinator::Config do
     end
   end
 
-  describe "#enviroment" do
+  describe "#environment" do
     context "environment variable $TMUXINATOR_CONFIG is not empty" do
       it "is $TMUXINATOR_CONFIG" do
         allow(ENV).to receive(:[]).with("TMUXINATOR_CONFIG").
           and_return "expected"
-        # allow(XDG).to receive(:[]).with("CONFIG").and_return "expected"
         allow(File).to receive(:directory?).and_return true
         expect(described_class.environment).to eq "expected"
       end
@@ -85,7 +87,6 @@ describe Tmuxinator::Config do
 
     context "environment variable $TMUXINATOR_CONFIG is set and empty" do
       it "is an empty string" do
-        allow(XDG).to receive(:[]).with("CONFIG").and_return ""
         allow(ENV).to receive(:[]).with("TMUXINATOR_CONFIG").and_return ""
         expect(described_class.environment).to eq ""
       end
@@ -134,7 +135,7 @@ describe Tmuxinator::Config do
 
   describe "#xdg" do
     it "is $XDG_CONFIG_HOME/tmuxinator" do
-      expect(described_class.xdg).to eq "#{XDG['CONFIG_HOME']}/tmuxinator"
+      expect(described_class.xdg).to eq File.expand_path("~/.config/tmuxinator")
     end
   end
 
@@ -150,35 +151,67 @@ describe Tmuxinator::Config do
     end
   end
 
+  describe "#default_or_sample" do
+    context "with default? true" do
+      before do
+        allow(described_class).to receive(:default?).and_return true
+        allow(described_class).to receive(:default).and_return("default_path")
+      end
+
+      it "gets the default config when it exists" do
+        expect(described_class.default_or_sample).to eq "default_path"
+      end
+    end
+
+    context "with default? false" do
+      before do
+        allow(described_class).to receive(:default?)
+        allow(described_class).to receive(:sample).and_return("sample_path")
+      end
+
+      it "falls back to the sample config when the default is missing" do
+        expect(described_class.default_or_sample).to eq "sample_path"
+      end
+    end
+  end
+
   describe "#version" do
     subject { described_class.version }
 
     before do
       expect(Tmuxinator::Doctor).to receive(:installed?).and_return(true)
-      allow_any_instance_of(Kernel).to receive(:`).with(/tmux\s\-V/).
+      allow_any_instance_of(Kernel).to receive(:`).
+        with(/tmux\s-V/).
         and_return("tmux #{version}")
     end
 
     version_mapping = {
-      "0.8"      => 0.8,
-      "1.0"      => 1.0,
-      "1.9"      => 1.9,
-      "1.9a"     => 1.9,
-      "2.4"      => 2.4,
-      "2.9a"     => 2.9,
-      "3.0-rc5"  => 3.0,
+      "0.8" => 0.8,
+      "1.0" => 1.0,
+      "1.9" => 1.9,
+      "1.9a" => 1.9,
+      "2.4" => 2.4,
+      "2.9a" => 2.9,
+      "3.0-rc5" => 3.0,
       "next-3.1" => 3.1,
-      "master"   => Float::INFINITY,
+      "master" => Float::INFINITY,
       # Failsafes
-      "foobar"   => 0.0,
-      "-123-"    => 123.0,
-      "5935"     => 5935.0,
-      ""         => 0.0,
-      "!@#^%"    => 0.0,
-      "2.9ä"     => 2.9,
-      "v3.5"     => 3.5,
-      "v3.12.0"  => 3.12,
-      "v3.12.5"  => 3.12
+      "foobar" => 0.0,
+      "-123-" => 123.0,
+      "5935" => 5935.0,
+      "" => 0.0,
+      "!@#^%" => 0.0,
+      "2.9ä" => 2.9,
+      "v3.5" => 3.5,
+      "v3.6" => 3.6,
+      "v3.6a" => 3.6,
+      "v3.6b" => 3.6,
+      "v3.7" => 3.7,
+      "v3.7a" => 3.7,
+      "v3.7b" => 3.7,
+      "v3.7c" => 3.7,
+      "v3.12.0" => 3.12,
+      "v3.12.5" => 3.12
     }.freeze
 
     version_mapping.each do |string_version, parsed_numeric_version|
@@ -255,6 +288,26 @@ describe Tmuxinator::Config do
         to eq ["both", "both", "dup/local-dup", "home", "local-dup", "xdg"]
     end
 
+    it "gets a sorted list of all active projects" do
+      allow(described_class).to receive(:environment?).and_return false
+      allow(described_class).
+        to receive(:active_sessions).
+        and_return ["both", "home"]
+
+      expect(described_class.configs(active: true)).
+        to eq ["both", "home"]
+    end
+
+    it "gets a sorted list excluding active projects" do
+      allow(described_class).to receive(:environment?).and_return false
+      allow(described_class).
+        to receive(:active_sessions).
+        and_return ["both", "home"]
+
+      expect(described_class.configs(active: false)).
+        to eq ["dup/local-dup", "local-dup", "xdg"]
+    end
+
     it "lists only projects in $TMUXINATOR_CONFIG when set" do
       allow(ENV).to receive(:[]).with("TMUXINATOR_CONFIG").
         and_return "#{fixtures_dir}/TMUXINATOR_CONFIG"
@@ -262,14 +315,14 @@ describe Tmuxinator::Config do
     end
   end
 
-  describe "#exists?" do
+  describe "#exist?" do
     before do
       allow(File).to receive_messages(exist?: true)
       allow(described_class).to receive_messages(project: "")
     end
 
     it "checks if the given project exists" do
-      expect(described_class.exists?(name: "test")).to be_truthy
+      expect(described_class.exist?(name: "test")).to be_truthy
     end
   end
 

@@ -1,6 +1,6 @@
 # Tmuxinator
 
-[![Gem Version](https://badge.fury.io/rb/tmuxinator.svg)](http://badge.fury.io/rb/tmuxinator) [![Build Status](https://secure.travis-ci.org/tmuxinator/tmuxinator.png?branch=master)](http://travis-ci.org/tmuxinator/tmuxinator?branch=master) [![Coverage Status](https://img.shields.io/coveralls/tmuxinator/tmuxinator.svg)](https://coveralls.io/r/tmuxinator/tmuxinator?branch=master) [![Code Climate](https://codeclimate.com/github/tmuxinator/tmuxinator/badges/gpa.svg)](https://codeclimate.com/github/tmuxinator/tmuxinator) [![Dependency Status](https://gemnasium.com/tmuxinator/tmuxinator.svg)](https://gemnasium.com/tmuxinator/tmuxinator) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/tmuxinator/tmuxinator?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gem Version](https://badge.fury.io/rb/tmuxinator.svg)](http://badge.fury.io/rb/tmuxinator) [![Integration Tests](https://github.com/tmuxinator/tmuxinator/actions/workflows/ci.yaml/badge.svg)](https://github.com/tmuxinator/tmuxinator/actions/workflows/ci.yaml) [![Coverage Status](https://img.shields.io/coveralls/tmuxinator/tmuxinator.svg)](https://coveralls.io/r/tmuxinator/tmuxinator?branch=master) [![Code Climate](https://codeclimate.com/github/tmuxinator/tmuxinator/badges/gpa.svg)](https://codeclimate.com/github/tmuxinator/tmuxinator) [![Dependency Status](https://gemnasium.com/tmuxinator/tmuxinator.svg)](https://gemnasium.com/tmuxinator/tmuxinator) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/tmuxinator/tmuxinator?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 Create and manage tmux sessions easily.
 
@@ -44,7 +44,7 @@ echo $EDITOR
 For me that produces "vim". If you want to change your default editor simply
 put a line in ~/.bashrc that changes it. Mine looks like this:
 
-```
+```bash
 export EDITOR='vim'
 ```
 
@@ -61,19 +61,19 @@ if you installed tmuxinator via Ruby's `gem`, you'll need to run the following
 commands to put the completion files where they'll be loaded by your shell.
 
 ### bash
-
-    # wget https://raw.githubusercontent.com/tmuxinator/tmuxinator/master/completion/tmuxinator.bash -O /etc/bash_completion.d/tmuxinator.bash
-
+```bash
+wget https://raw.githubusercontent.com/tmuxinator/tmuxinator/master/completion/tmuxinator.bash -O /etc/bash_completion.d/tmuxinator.bash
+```
 ### zsh
-
-    # wget https://raw.githubusercontent.com/tmuxinator/tmuxinator/master/completion/tmuxinator.zsh -O /usr/local/share/zsh/site-functions/_tmuxinator
-
+```bash
+wget https://raw.githubusercontent.com/tmuxinator/tmuxinator/master/completion/tmuxinator.zsh -O /usr/local/share/zsh/site-functions/_tmuxinator
+```
 Note: ZSH's completion files can be put in other locations in your `$fpath`. Please refer to the [manual](http://zsh.sourceforge.net/Doc/Release/Functions.html) for more details.
 
 ### fish
-
-    $ wget https://raw.githubusercontent.com/tmuxinator/tmuxinator/master/completion/tmuxinator.fish ~/.config/fish/completions/
-
+```bash
+wget https://raw.githubusercontent.com/tmuxinator/tmuxinator/master/completion/tmuxinator.fish -O ~/.config/fish/completions/tmuxinator.fish
+```
 ## Usage
 
 A working knowledge of tmux is assumed. You should understand what windows and
@@ -81,24 +81,26 @@ panes are in tmux. If not please consult the [man pages](https://web.archive.org
 
 ### Create a project
 
-Create or edit your projects with:
+Create a project with:
 
 ```
 tmuxinator new [project]
 ```
 
-Create or edit a local project where the config file will be stored in the 
-current working directory (in `.tmuxinator.yml`) instead of the default 
-project configuration file location (e.g. `~/.config/tmuxinator`):
+Create a local project where the config file will be stored in the current
+working directory (in `.tmuxinator.yml`) instead of the default project
+configuration file location (e.g. `~/.config/tmuxinator`):
 
 ```
 tmuxinator new --local [project]
 ```
 
-For editing you can also use `tmuxinator open [project]`. `new` is aliased to
-`n`,`open` to `o`, and `edit` to `e`. Please note that dots can't be used in project
-names as tmux uses them internally to delimit between windows and panes.
-Your default editor (`$EDITOR`) is used to open the file.
+Use `tmuxinator open [project]` to create or open a config in your editor, or
+`tmuxinator edit [project]` to edit an existing config without creating a new
+one. `new`, `open`, and `edit` are aliased to `n`, `o`, and `e`. Please note
+that dots can't be used in project names as tmux uses them internally to
+delimit between windows and panes. Your default editor (`$EDITOR`) is used to
+open the file.
 If this is a new project you will see this default config:
 
 ```yaml
@@ -136,30 +138,52 @@ root: ~/
 # Pass command line options to tmux. Useful for specifying a different tmux.conf.
 # tmux_options: -f ~/.tmux.mac.conf
 
-# Change the command to call tmux.  This can be used by derivatives/wrappers like byobu.
+# Change the command to call tmux. This can be used by derivatives/wrappers like byobu.
 # tmux_command: byobu
 
 # Specifies (by name or index) which window will be selected on project startup. If not set, the first window is used.
 # startup_window: editor
 
-# Specifies (by index) which pane of the specified window will be selected on project startup. If not set, the first pane is used.
+# Specifies (by index) which pane of the startup window will be selected on project startup. If not set, the first pane is used.
 # startup_pane: 1
 
 # Controls whether the tmux session should be attached to automatically. Defaults to true.
 # attach: false
 
+# Enables the display of pane titles. For example "editor" below. Defaults to false.
+# enable_pane_titles: true
+
+# Configures pane title position. Can be: bottom, top, or "off". Note: "off" must be provided in quotes to avoid being interpreted as a boolean false. Defaults to top.
+# pane_title_position: bottom
+
+# Configures pane title format. Defaults to "#{pane_index}: #{pane_title}".
+# Please see the tmux manpage for details, on valid formats.
+# pane_title_format: " [ #T ] "
+
 windows:
   - editor:
       layout: main-vertical
-      # Synchronize all panes of this window, can be enabled before or after the pane commands run.
-      # 'before' represents legacy functionality and will be deprecated in a future release, in favour of 'after'
-      # synchronize: after
       panes:
-        - vim
+        - editor: vim
         - guard
+      # Focus a pane by name or index. Indices are based off zero and automatically adjusted to your pane-base-index.
+      focused_pane: editor
+      # Synchronize all panes of this window, can be enabled before or after the pane commands run.
+      # synchronize: after
   - server: bundle exec rails s
   - logs: tail -f log/development.log
 ```
+
+It's also possible to create a new tmuxinator project from an existing tmux
+session. This can be done by running the following command:
+
+```bash
+tmuxinator new [project] [session]
+```
+
+This will record the windows, along with their specified layout, panes,
+tmux session options, and project root based on the tmux
+default-path of the specified tmux session in the new tmuxinator project.
 
 ## Windows
 
@@ -216,6 +240,50 @@ or [specify your own](http://stackoverflow.com/a/9976282/183537).
 be due [#651](https://github.com/tmuxinator/tmuxinator/issues/651). See [this
 comment](https://github.com/tmuxinator/tmuxinator/issues/651#issuecomment-497780424)
 for a workaround.
+
+### Pane Titles
+
+Starting with tmux v2.6 it is possible to give a title to panes. Pane titles will be shown only when `enable_pane_titles: true` is set.
+
+```yaml
+enable_pane_titles: true
+
+windows:
+  - editor:
+      layout: main-vertical
+      panes:
+        - editor: vim
+        - guard: guard
+```
+
+### Focus Pane
+
+Focus a pane within a specific window by specifying `focused_pane` on that window. Focused panes can be specified by their index. Indices start with zero and are automatically adjusted to your tmux `pane-base-index`.
+
+```yaml
+windows:
+  - editor:
+      layout: main-vertical
+      panes:
+        - vim
+        - guard
+        - devlog
+      focused_pane: 2 # Focus the last pane
+```
+
+When using named panes, you may specify a pane by its name.
+
+```yaml
+windows:
+  - editor:
+      layout: main-vertical
+      panes:
+        - editor: vim
+        - guard: guard
+      focused_pane: guard
+```
+
+`focused_pane` selects the active pane within that window when the window is configured. The top-level `startup_window` and `startup_pane` options still control which window and pane are finally selected when tmuxinator finishes starting the project.
 
 ## Interpreter Managers & Environment Variables
 
@@ -341,6 +409,16 @@ List all the projects you have configured. Aliased to `l` and `ls`
 tmuxinator list
 ```
 
+Stop a project.
+```
+tmuxinator stop [project]
+```
+
+Stop all active projects.
+```
+tmuxinator stop-all
+```
+
 Remove a project. Aliased to `rm`
 ```
 tmuxinator delete [project]
@@ -371,13 +449,18 @@ Shows tmuxinator's version.
 tmuxinator version
 ```
 
+Append a project's windows to the current session (instead of creating a new session)
+```
+tmuxinator start [project] --append
+```
+
 ## Project Configuration Location
 
-Using environment variables, it's possible to define which directory 
-tmuxinator will use when creating or searching for project config 
+Using environment variables, it's possible to define which directory
+tmuxinator will use when creating or searching for project config
 files. (See [PR #511](https://github.com/tmuxinator/tmuxinator/pull/511).)
 
-Tmuxinator will attempt to use the following locations (in this order) when 
+Tmuxinator will attempt to use the following locations (in this order) when
 creating or searching for existing project configuration files:
 
 - `$TMUXINATOR_CONFIG`
@@ -390,10 +473,31 @@ creating or searching for existing project configuration files:
 
 Add `export DISABLE_AUTO_TITLE=true` to your `.zshrc` or `.bashrc`
 
+### Commands being lost or corrupted
+
+If a lot of commands or long commands are sent to a pane, and commands or characters seem to be lost or corrupted, it could be that the TTY typeahead buffer is full and losing new characters. This may happen when an earlier command takes a long time to complete. This seems to affect macOS with zsh more than other platforms.
+
+When this occurs, try putting your commands in a separate script and calling that from your tmuxinator configuration using e.g.: `source`.
+
 ## Contributing
 
 To contribute, please read the [contributing guide](https://github.com/tmuxinator/tmuxinator/blob/master/CONTRIBUTING.md).
 
+### Interface snapshots
+
+Run the interface snapshot tests with:
+
+```bash
+bundle exec rake interface
+```
+
+When an intentional change affects the generated shell script output, regenerate
+the snapshots with:
+
+```bash
+UPDATE_SNAPSHOTS=1 bundle exec rake interface
+```
+
 ## Copyright
 
-Copyright (c) 2010-2020 Allen Bargi, Christopher Chow. See LICENSE for further details.
+Copyright (c) 2010-2025 Allen Bargi, Christopher Chow. See LICENSE for further details.
